@@ -33,6 +33,7 @@ interface VideoState {
 interface RankedResult<T> {
   item: T
   score: number
+  _group?: 'course' | 'exercise' | 'plan' | 'knowledge'
 }
 
 // ─── Utilities ───
@@ -191,7 +192,7 @@ export default function Search() {
 
   const [query, setQuery] = useState(initialQuery)
   const [debouncedQuery, setDebouncedQuery] = useState(initialQuery)
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>()
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const [searchHistory, setSearchHistory] = useState<HistoryItem[]>([])
   const [showHistory, setShowHistory] = useState(false)
   const [videoModal, setVideoModal] = useState<VideoState>({ open: false, title: '', type: 'course' })
@@ -642,7 +643,7 @@ export default function Search() {
                   <span className="text-sm font-normal text-zinc-500">({rankedCourses.length})</span>
                 </h2>
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {rankedCourses.map((r, i) =>
+                  {rankedCourses.map(r =>
                     renderCard(
                       r.item,
                       r.score,
@@ -665,7 +666,7 @@ export default function Search() {
                   <span className="text-sm font-normal text-zinc-500">({rankedExercises.length})</span>
                 </h2>
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {rankedExercises.map((r, i) =>
+                  {rankedExercises.map(r =>
                     renderCard(
                       r.item,
                       r.score,
@@ -687,7 +688,7 @@ export default function Search() {
                   <span className="text-sm font-normal text-zinc-500">({rankedPlans.length})</span>
                 </h2>
                 <div className="space-y-3">
-                  {rankedPlans.map((r, i) =>
+                  {rankedPlans.map(r =>
                     renderPlanCard(
                       r.item,
                       r.score,
@@ -708,7 +709,7 @@ export default function Search() {
                   <span className="text-sm font-normal text-zinc-500">({rankedKnowledge.length})</span>
                 </h2>
                 <div className="space-y-3">
-                  {rankedKnowledge.map((r, i) =>
+                  {rankedKnowledge.map(r =>
                     renderKnowledgeCard(
                       r.item,
                       r.score,

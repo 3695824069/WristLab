@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import { Search, BookOpen, Clock, ChevronRight, TrendingUp, ArrowRight } from 'lucide-react'
+import { Search, BookOpen, Clock, ChevronRight, TrendingUp } from 'lucide-react'
 import { knowledgeArticles } from '../data/knowledge'
 import { knowledgeCategoryLabels } from '../types'
 import type { KnowledgeCategory } from '../types'

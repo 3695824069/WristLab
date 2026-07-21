@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { Flame, Trophy, Calendar, ArrowRight, CheckCircle, TrendingUp, BarChart3, ChevronRight, Activity } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { getWorkoutHistory, getWorkoutStats } from '../lib/api'
@@ -24,12 +24,10 @@ interface WorkoutStats {
 export default function Records() {
   const { user } = useAuth()
   const { t } = useTranslation()
-  const navigate = useNavigate()
   const WEEKDAYS = [t('records.sun'), t('records.mon'), t('records.tue'), t('records.wed'), t('records.thu'), t('records.fri'), t('records.sat')]
   const [records, setRecords] = useState<WorkoutRecord[]>([])
   const [stats, setStats] = useState<WorkoutStats | null>(null)
   const [loading, setLoading] = useState(true)
-  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list')
 
   useEffect(() => {
     if (!user) { setLoading(false); return }
@@ -178,7 +176,7 @@ export default function Records() {
                 {monthlyStats.map(([key, count]) => {
                   const maxCount = Math.max(...monthlyStats.map(([, c]) => c))
                   const height = maxCount > 0 ? (count / maxCount) * 100 : 0
-                  const [year, month] = key.split('-')
+                  const month = key.split('-')[1]
                   return (
                     <div key={key} className="flex-1 flex flex-col items-center gap-2 min-w-0">
                       <span className="text-xs text-zinc-500">{count}</span>

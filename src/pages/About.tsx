@@ -7,7 +7,6 @@ import {
   Calendar,
   TrendingUp,
   AlertTriangle,
-  CheckCircle,
   Target,
   User,
   Mail,
