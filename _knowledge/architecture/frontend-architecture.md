@@ -85,6 +85,15 @@ src/
 - Context（AuthContext）+ useState + localStorage
 - 收藏数据：乐观更新（先改本地，再同步后端）
 
+### 6. localStorage Keys
+
+| Key | 用途 |
+|-----|------|
+| `fithub_auth` | JWT token（登录状态） |
+| `favorites_{userId}` | 收藏缓存 |
+| `fithub_search_history_v2` | 搜索历史 |
+| `wristlab_language` | 语言偏好 |
+
 ## 关键模式
 
 ### createI18nRecord — 响应式 i18n 标签
