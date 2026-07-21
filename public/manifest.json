@@ -1,0 +1,24 @@
+{
+  "name": "WristLab",
+  "short_name": "WristLab",
+  "description": "腕力训练平台 — 从握力、前臂、手腕到实战技术，系统学习腕力训练",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#22c55e",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["fitness", "sports", "education"]
+}

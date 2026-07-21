@@ -1,0 +1,10 @@
+.env
+node_modules/
+*.db
+*.db-shm
+*.db-wal
+*.bak
+*.log
+.DS_Store
+dist/
+.workbuddy/
