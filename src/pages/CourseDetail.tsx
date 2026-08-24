@@ -115,12 +115,13 @@ export default function CourseDetail() {
                 await checkin(course.id)
                 setCheckedIn(true)
                 toast.success(t('courses.checkinSuccess'))
-              } catch (err: any) {
-                if (err.message === '今天已经打卡过了') {
+              } catch (err: unknown) {
+                const code = (err as { code?: string }).code
+                if (code === 'ALREADY_CHECKED_IN') {
                   setCheckedIn(true)
                   toast.info(t('courses.checkinDupe'))
                 } else {
-                  toast.error(err.message || t('courses.checkinFail'))
+                  toast.error(err instanceof Error ? err.message : String(err) || t('courses.checkinFail'))
                 }
               } finally {
                 setCheckingIn(false)

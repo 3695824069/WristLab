@@ -53,8 +53,8 @@ export default function Profile() {
       const res = await updateProfile({ avatar: base64 })
       updateUser(res.data.user)
       toast.success(t('profile.toastAvatarSuccess'))
-    } catch (err: any) {
-      toast.error(err.message || t('profile.toastAvatarFail'))
+    } catch (err: unknown) {
+      toast.error((err as Error).message || t('profile.toastAvatarFail'))
     } finally {
       setUploadingAvatar(false)
     }
@@ -65,6 +65,7 @@ export default function Profile() {
 
   useEffect(() => {
     if (user) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setStatsLoading(true)
       getWorkoutStats()
         .then(res => setWorkoutStats(res.data.stats))
@@ -81,8 +82,8 @@ export default function Profile() {
       updateUser(res.data.user)
       setEditing(false)
       toast.success(t('profile.toastNicknameSuccess'))
-    } catch (err: any) {
-      toast.error(err.message || t('profile.toastUpdateFail'))
+    } catch (err: unknown) {
+      toast.error((err as Error).message || t('profile.toastUpdateFail'))
     } finally {
       setSaving(false)
     }
@@ -116,8 +117,8 @@ export default function Profile() {
           return prev - 1
         })
       }, 1000)
-    } catch (err: any) {
-      toast.error(err.message || t('profile.toastEmailCodeFail'))
+    } catch (err: unknown) {
+      toast.error((err as Error).message || t('profile.toastEmailCodeFail'))
     } finally {
       setEmailLoading(false)
     }
@@ -143,8 +144,8 @@ export default function Profile() {
       setEmailDialogOpen(false)
       setBindEmailInput('')
       setBindCodeInput('')
-    } catch (err: any) {
-      toast.error(err.message || t('profile.toastBindFail'))
+    } catch (err: unknown) {
+      toast.error((err as Error).message || t('profile.toastBindFail'))
     } finally {
       setEmailLoading(false)
     }
@@ -159,8 +160,8 @@ export default function Profile() {
         updateUser(res.data.user)
       }
       toast.success(t('profile.toastUnbindSuccess'))
-    } catch (err: any) {
-      toast.error(err.message || t('profile.toastUnbindFail'))
+    } catch (err: unknown) {
+      toast.error((err as Error).message || t('profile.toastUnbindFail'))
     } finally {
       setUnbinding(false)
     }

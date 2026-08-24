@@ -1,13 +1,14 @@
-import { useState, useEffect, useMemo, useRef, Fragment } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { Search as SearchIcon, X, Clock, ArrowRight, Play, Star } from 'lucide-react'
-import { pinyin } from 'pinyin-pro'
 import { courses } from '../data/courses'
 import { exercises } from '../data/exercises'
 import { plans } from '../data/plans'
 import { knowledgeArticles } from '../data/knowledge'
 import VideoModal from '../components/VideoModal'
 import { useTranslation } from 'react-i18next'
+import { getTitle, getDesc, rank, highlightText } from '../lib/search-utils'
+import type { RankedResult } from '../lib/search-utils'
 
 // ─── Constants ───
 
@@ -30,99 +31,10 @@ interface VideoState {
   type: 'course' | 'exercise'
 }
 
-interface RankedResult<T> {
-  item: T
-  score: number
-  _group?: 'course' | 'exercise' | 'plan' | 'knowledge'
-}
-
 // ─── Utilities ───
 
-function getTitle(item: any): string {
-  return item.title || item.name || ''
-}
-
-function getDesc(item: any): string {
-  return item.description || item.instruction || ''
-}
-
-/** Convert Chinese text to pinyin (no tones, no spaces). */
-function toPinyin(text: string): string {
-  try {
-    return pinyin(text, { toneType: 'none' }).replace(/\s+/g, '')
-  } catch {
-    return ''
-  }
-}
-
-/**
- * Compute a relevance score for an item against query `q`.
- */
-function scoreItem(item: any, rawQ: string): number {
-  const q = rawQ.toLowerCase()
-  const title = getTitle(item).toLowerCase()
-  const desc = getDesc(item).toLowerCase()
-  const category = (item.category || '').toLowerCase()
-
-  let score = 0
-
-  if (title.includes(q)) {
-    score += 10
-  } else {
-    const p = toPinyin(title)
-    if (p.includes(q)) score += 8
-  }
-
-  if (title.startsWith(q)) score += 5
-  if (category.includes(q)) score += 5
-  if (desc.includes(q)) score += 2
-
-  return score
-}
-
-/**
- * Split text into React nodes with matched keywords wrapped in <mark>.
- * Supports multiple keywords (space-separated). No innerHTML.
- */
-function highlightText(text: string, rawQ: string): React.ReactNode[] {
-  if (!rawQ || !text) return [text]
-
-  const keywords = rawQ
-    .split(/\s+/)
-    .filter(Boolean)
-    .map(k => k.toLowerCase())
-
-  if (keywords.length === 0) return [text]
-
-  // Build a case-insensitive regex that captures any keyword
-  const escaped = keywords.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-  const pattern = `(${escaped.join('|')})`
-  const regex = new RegExp(pattern, 'gi')
-
-  const parts = text.split(regex)
-  const result: React.ReactNode[] = []
-
-  for (let i = 0; i < parts.length; i++) {
-    const part = parts[i]
-    if (!part) continue
-
-    if (keywords.includes(part.toLowerCase())) {
-      // Use Fragment with key for stable rendering
-      result.push(
-        <mark
-          key={i}
-          className="bg-yellow-300/80 text-yellow-900 font-semibold px-1 rounded shadow-[0_0_0_1px_rgba(250,204,21,0.3)]"
-        >
-          {part}
-        </mark>
-      )
-    } else {
-      result.push(<Fragment key={i}>{part}</Fragment>)
-    }
-  }
-
-  return result
-}
+// getTitle, getDesc, toPinyin, scoreItem, rank, highlightText, RankedResult
+// are imported from ../lib/search-utils
 
 /**
  * Return container style classes based on score.
@@ -174,15 +86,6 @@ function clearAllHistory() {
   localStorage.removeItem(SEARCH_HISTORY_KEY)
 }
 
-// ─── Rank a data source ───
-
-function rank<T>(items: T[], q: string): RankedResult<T>[] {
-  return items
-    .map(item => ({ item, score: scoreItem(item, q) }))
-    .filter(r => r.score > 0)
-    .sort((a, b) => b.score - a.score)
-}
-
 // ─── Component ───
 
 export default function Search() {
@@ -210,7 +113,7 @@ export default function Search() {
   // ─── Load history ───
 
   useEffect(() => {
-    setSearchHistory(loadHistory())
+    setSearchHistory(loadHistory()) // eslint-disable-line react-hooks/set-state-in-effect
   }, [])
 
   // ─── Search handler ───
@@ -252,6 +155,7 @@ export default function Search() {
 
   // Flatten all ranked results to find the single top result
   const allRanked = useMemo(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const all: RankedResult<any>[] = []
     if (rankedCourses) all.push(...rankedCourses.map(r => ({ ...r, _group: 'course' as const })))
     if (rankedExercises) all.push(...rankedExercises.map(r => ({ ...r, _group: 'exercise' as const })))
@@ -269,6 +173,7 @@ export default function Search() {
 
   // ─── Render helpers ───
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const renderThumbnail = (item: any, title: string) => (
     <div className="relative aspect-video bg-zinc-800 flex-shrink-0">
       {(item.thumbnail) ? (
@@ -301,6 +206,7 @@ export default function Search() {
     </div>
   )
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const renderCard = (item: any, score: number, q: string, type: 'course' | 'exercise', isTop: boolean) => {
     const title = getTitle(item)
     const desc = getDesc(item)
@@ -392,6 +298,7 @@ export default function Search() {
     )
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const renderPlanCard = (plan: any, score: number, q: string, isTop: boolean) => {
     if (isTop) {
       return (
@@ -448,6 +355,7 @@ export default function Search() {
     )
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const renderKnowledgeCard = (article: any, score: number, q: string, isTop: boolean) => {
     if (isTop) {
       return (

@@ -246,7 +246,10 @@
     "checkinSuccessCount": "完成 {{count}} 个训练项！继续加油 💪",
     "needLogin": "请先登录",
     "checkinDupe": "今天已经打卡过了",
-    "checkinFail": "打卡失败"
+    "checkinFail": "打卡失败",
+    "sets": "组数",
+    "reps": "次数",
+    "weight": "重量"
   },
   "knowledge": {
     "title": "腕力知识库",
@@ -393,6 +396,11 @@
     "viewPlan": "查看计划",
     "continueTraining": "继续训练",
     "defaultPlanTitle": "自主训练",
+    "trendTitle": "每周训练次数",
+    "trendWorkouts": "训练次数",
+    "trendWeekLabel": "{{date}} 起的这一周",
+    "trendEmpty1": "继续训练，积累更多数据后",
+    "trendEmpty2": "这里将展示你的每周训练趋势",
     "month": "{{n}}月",
     "sun": "日",
     "mon": "一",

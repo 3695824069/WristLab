@@ -79,6 +79,8 @@ async function sendSms(phone, code) {
     TemplateParam: JSON.stringify({ code, min: String(CODE_EXPIRY_MINUTES) }),
     CodeLength: 4,
     ValidTime: CODE_EXPIRY_MINUTES * 60,
+    CodeType: 1,
+    ReturnVerifyCode: true,
   };
 
   // Calculate Aliyun RPC signature
@@ -186,15 +188,21 @@ router.post('/send-code', async (req, res) => {
     }
 
     // dev or real mode: return the code directly for development/testing
-    return res.json({
+    // Security: only expose _dev_code to localhost requests (same gate as the
+    // success branch above). Never leak the OTP to remote clients, even if the
+    // SMS API failed in "real" mode — that would be account takeover.
+    const response = {
       success: true,
       message: '验证码已发送',
-      _dev_code: code,
       _expires_in: CODE_EXPIRY_MINUTES * 60,
       _warning: SMS_MODE === 'real'
         ? '阿里云短信发送失败（或AK/SK未配置），已降级为开发验证码'
         : '开发模式下直接显示验证码，不发送真实短信',
-    });
+    };
+    if (DEV_MODE && isLocalRequest(req)) {
+      response._dev_code = code;
+    }
+    return res.json(response);
   } catch (err) {
     console.error('send-code error:', err);
     res.status(500).json({ success: false, message: '服务器内部错误' });

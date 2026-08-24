@@ -34,8 +34,8 @@ export default function Login() {
           return prev - 1
         })
       }, 1000)
-    } catch (err: any) {
-      toast.error(err.message || t('login.toastSendFail'))
+    } catch (err: unknown) {
+      toast.error((err as Error).message || t('login.toastSendFail'))
     } finally {
       setLoading(false)
     }
@@ -57,8 +57,8 @@ export default function Login() {
       authLogin(res.data.token, res.data.user)
       toast.success(t('login.toastLoginSuccess'))
       navigate('/')
-    } catch (err: any) {
-      toast.error(err.message || t('login.toastLoginFail'))
+    } catch (err: unknown) {
+      toast.error((err as Error).message || t('login.toastLoginFail'))
     } finally {
       setLoading(false)
     }

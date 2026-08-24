@@ -201,31 +201,105 @@ function verifyCode(phone, code) {
 
 // --- Workout Record operations ---
 
-function createWorkoutRecord(userId, planId = '', completedExercises = []) {
-  getDb();
-  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-  try {
-    execute(
-      'INSERT INTO workout_records (user_id, plan_id, record_date) VALUES (?, ?, ?)',
-      [userId, planId, today]
-    );
-    const recordId = queryOne('SELECT last_insert_rowid() as id').id;
+/** Local-timezone YYYY-MM-DD. Avoids toISOString() (UTC) off-by-one for UTC+8 users. */
+function localDateStr(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 
-    if (completedExercises && completedExercises.length > 0) {
-      const now = new Date().toISOString();
-      for (let i = 0; i < completedExercises.length; i++) {
-        const ex = completedExercises[i];
-        execute(
-          `INSERT INTO workout_exercise_records
-           (workout_record_id, exercise_id, display_text, completed, completed_at, sort_order)
-           VALUES (?, ?, ?, 1, ?, ?)`,
-          [recordId, ex.exerciseId || null, ex.displayText, now, i]
-        );
+/**
+ * Create a workout record (check-in).
+ * Accepts both V1 (completedExercises) and V2 (exercises with sets/reps/weight/rpe) formats.
+ *
+ * @param {number} userId
+ * @param {string} planId
+ * @param {Array} exercises - V1: [{ exerciseId, displayText }] or V2: [{ exerciseId, displayText, sets, reps, weight, rpe }]
+ * @param {object} [options] - V2 session metadata
+ * @param {number} [options.dayIndex]
+ * @param {string} [options.notes]
+ * @param {string} [options.startedAt]
+ * @param {string} [options.completedAt]
+ * @returns {object|null} { recordId, today } or null if already checked in today
+ */
+function createWorkoutRecord(userId, planId = '', exercises = [], options = {}) {
+  getDb();
+  const today = localDateStr(new Date());
+  try {
+    // Single transaction: record + exercise rows are atomic (no orphan records).
+    // UNIQUE(user_id, record_date) throws inside the transaction on duplicate,
+    // which rolls back and is caught below → returns null → 409.
+    let recordId;
+    transaction(() => {
+      // Insert record with optional V2 metadata fields
+      const recordCols = ['user_id', 'plan_id', 'record_date'];
+      const recordVals = [userId, planId, today];
+
+      if (options.dayIndex != null) {
+        recordCols.push('day_index');
+        recordVals.push(options.dayIndex);
       }
-    }
+      if (options.notes != null) {
+        recordCols.push('notes');
+        recordVals.push(options.notes);
+      }
+      if (options.startedAt != null) {
+        recordCols.push('started_at');
+        recordVals.push(options.startedAt);
+      }
+      if (options.completedAt != null) {
+        recordCols.push('completed_at');
+        recordVals.push(options.completedAt);
+      }
+
+      execute(
+        `INSERT INTO workout_records (${recordCols.join(', ')}) VALUES (${recordCols.map(() => '?').join(', ')})`,
+        recordVals
+      );
+      recordId = queryOne('SELECT last_insert_rowid() as id').id;
+
+      if (exercises && exercises.length > 0) {
+        const now = new Date().toISOString();
+        for (let i = 0; i < exercises.length; i++) {
+          const ex = exercises[i];
+
+          // Detect V2 format: has structured fields beyond exerciseId/displayText
+          const isV2 = ex.sets != null || ex.reps != null || ex.weight != null || ex.rpe != null;
+
+          if (isV2) {
+            execute(
+              `INSERT INTO workout_exercise_records
+               (workout_record_id, exercise_id, display_text, completed, completed_at, sort_order,
+                sets, reps, weight, rpe)
+               VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?)`,
+              [
+                recordId,
+                ex.exerciseId || null,
+                ex.displayText,
+                now,
+                i,
+                ex.sets != null ? ex.sets : null,
+                ex.reps != null ? ex.reps : null,
+                ex.weight != null ? ex.weight : null,
+                ex.rpe != null ? ex.rpe : null,
+              ]
+            );
+          } else {
+            // V1 format: backward compatible
+            execute(
+              `INSERT INTO workout_exercise_records
+               (workout_record_id, exercise_id, display_text, completed, completed_at, sort_order)
+               VALUES (?, ?, ?, 1, ?, ?)`,
+              [recordId, ex.exerciseId || null, ex.displayText, now, i]
+            );
+          }
+        }
+      }
+    });
     return { recordId, today };
   } catch (err) {
-    // UNIQUE constraint — already checked in today
+    // UNIQUE constraint — already checked in today (or any insert failure: rolled back)
     return null;
   }
 }
@@ -246,6 +320,56 @@ function getWorkoutRecords(userId, limit = 30) {
   return rows;
 }
 
+/**
+ * Get weekly training counts for the past N weeks.
+ * Returns array of { week_start: string (Monday), count: number }.
+ */
+function getWorkoutTrends(userId, weeks = 12) {
+  getDb();
+  const rows = db.prepare(
+    'SELECT record_date FROM workout_records WHERE user_id = ? ORDER BY record_date'
+  ).all(userId);
+
+  // Build a map of date → count
+  const dateCount = {};
+  for (const r of rows) {
+    dateCount[r.record_date] = (dateCount[r.record_date] || 0) + 1;
+  }
+
+  // Walk backward from last Monday, weeks at a time
+  const now = new Date();
+  const dayOfWeek = now.getDay(); // 0=Sun
+  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  const thisMonday = new Date(now);
+  thisMonday.setDate(now.getDate() + mondayOffset);
+  thisMonday.setHours(0, 0, 0, 0);
+
+  const result = [];
+  for (let w = 0; w < weeks; w++) {
+    const mon = new Date(thisMonday);
+    mon.setDate(mon.getDate() - w * 7);
+    const sun = new Date(mon);
+    sun.setDate(sun.getDate() + 6);
+
+    // Format YYYY-MM-DD (local timezone — matches record_date written at checkin)
+    const monStr = localDateStr(mon);
+    const sunStr = localDateStr(sun);
+
+    let count = 0;
+    // Sum counts for each day in this week
+    const cursor = new Date(mon);
+    while (cursor <= sun) {
+      const d = localDateStr(cursor);
+      if (dateCount[d]) count += dateCount[d];
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    result.push({ week_start: monStr, count });
+  }
+
+  return result.reverse(); // oldest first
+}
+
 function getWorkoutStats(userId) {
   getDb();
   const rows = getWorkoutRecords(userId, 365);
@@ -257,7 +381,7 @@ function getWorkoutStats(userId) {
   const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
   const monday = new Date(now);
   monday.setDate(now.getDate() + mondayOffset);
-  const mondayStr = monday.toISOString().split('T')[0];
+  const mondayStr = localDateStr(monday);
 
   let weekCount = 0;
   for (const r of rows) {
@@ -362,4 +486,4 @@ function toggleFavorite(userId, itemId, itemType, title, thumbnail) {
   return getUserFavorites(userId);
 }
 
-module.exports = { getDb, saveDb, findOrCreateUser, getUser, updateUser, saveCode, verifyCode, createWorkoutRecord, getWorkoutRecords, getWorkoutStats, exec, queryOne, transaction, getUserByEmail, updateUserEmail, saveEmailCode, getLatestUnusedCode, markCodeUsed, invalidateEmailCodes, getUserFavorites, toggleFavorite };
+module.exports = { getDb, saveDb, findOrCreateUser, getUser, updateUser, saveCode, verifyCode, createWorkoutRecord, getWorkoutRecords, getWorkoutStats, getWorkoutTrends, exec, queryOne, transaction, getUserByEmail, updateUserEmail, saveEmailCode, getLatestUnusedCode, markCodeUsed, invalidateEmailCodes, getUserFavorites, toggleFavorite };

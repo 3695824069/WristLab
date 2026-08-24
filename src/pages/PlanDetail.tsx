@@ -5,7 +5,41 @@ import { plans } from '../data/plans'
 import { Flame, CheckCircle, Circle, Target } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { checkin, getWorkoutHistory } from '../lib/api'
+import type { ExerciseInputV2 } from '../lib/api'
 import { toast } from 'sonner'
+
+interface ExerciseDetailInput {
+  sets: string
+  reps: string
+  weight: string
+  rpe: string
+}
+
+interface ParsedExerciseValues {
+  sets: number | null
+  reps: number | null
+  weight: number | null
+  rpe: number | null
+}
+
+/** Parse raw string inputs into numbers (empty → null). */
+function parseExerciseInput(detail: ExerciseDetailInput): ParsedExerciseValues {
+  return {
+    sets: detail.sets.trim() ? parseInt(detail.sets, 10) : null,
+    reps: detail.reps.trim() ? parseInt(detail.reps, 10) : null,
+    weight: detail.weight.trim() ? parseFloat(detail.weight) : null,
+    rpe: detail.rpe.trim() ? parseInt(detail.rpe, 10) : null,
+  }
+}
+
+/** Validate parsed values. Returns an error message, or null if valid. */
+function validateExerciseInput(key: string, values: ParsedExerciseValues): string | null {
+  if (values.sets != null && (isNaN(values.sets) || values.sets < 1)) return `「${key}」组数必须 ≥ 1`
+  if (values.reps != null && (isNaN(values.reps) || values.reps < 1)) return `「${key}」次数必须 ≥ 1`
+  if (values.weight != null && (isNaN(values.weight) || values.weight < 0)) return `「${key}」重量不能为负数`
+  if (values.rpe != null && (isNaN(values.rpe) || values.rpe < 1 || values.rpe > 10)) return `「${key}」RPE 必须在 1-10 之间`
+  return null
+}
 
 export default function PlanDetail() {
   const { id } = useParams<{ id: string }>()
@@ -18,6 +52,8 @@ export default function PlanDetail() {
   const [uniqueDays, setUniqueDays] = useState(0)
   const dayRefs = useRef<Record<number, HTMLDivElement | null>>({})
   const [checkedExercises, setCheckedExercises] = useState<Set<string>>(new Set())
+  const [exerciseDetails, setExerciseDetails] = useState<Record<string, ExerciseDetailInput>>({})
+  const [notes, setNotes] = useState('')
   const { t } = useTranslation()
 
   const highlightDay = searchParams.get('day') ? parseInt(searchParams.get('day')!) : null
@@ -57,24 +93,46 @@ export default function PlanDetail() {
         next.delete(key)
       } else {
         next.add(key)
+        // Initialize empty detail fields on check
+        setExerciseDetails(existing => {
+          if (existing[key]) return existing
+          return { ...existing, [key]: { sets: '', reps: '', weight: '', rpe: '' } }
+        })
       }
       return next
     })
   }
 
-  // Collect completed exercises for the API
-  const getCompletedExercises = () => {
+  // Update exercise detail field
+  const updateExerciseDetail = (key: string, field: keyof ExerciseDetailInput, value: string) => {
+    setExerciseDetails(prev => ({
+      ...prev,
+      [key]: { ...prev[key], [field]: value },
+    }))
+  }
+
+  // Collect completed exercises for the API (V2 format)
+  const getCompletedExercises = (): ExerciseInputV2[] => {
     if (!plan) return []
-    const result: { exerciseId?: string; displayText: string }[] = []
+    const result: ExerciseInputV2[] = []
     for (const day of plan.days) {
       for (let i = 0; i < day.exercises.length; i++) {
         const key = `${day.day}-${i}`
         if (checkedExercises.has(key)) {
           const ex = day.exercises[i]
-          result.push({
+          const detail = exerciseDetails[key]
+          const entry: ExerciseInputV2 = {
             exerciseId: ex.exerciseId,
             displayText: ex.displayText,
-          })
+          }
+          if (detail) {
+            const values = parseExerciseInput(detail)
+            if (values.sets != null && !isNaN(values.sets)) entry.sets = values.sets
+            if (values.reps != null && !isNaN(values.reps)) entry.reps = values.reps
+            if (values.weight != null && !isNaN(values.weight)) entry.weight = values.weight
+            if (values.rpe != null && !isNaN(values.rpe)) entry.rpe = values.rpe
+          }
+          result.push(entry)
         }
       }
     }
@@ -86,10 +144,25 @@ export default function PlanDetail() {
       toast.error(t('plans.needLogin'))
       return
     }
+
+    // Validate V2 inputs if any details were filled
+    const detailsToValidate = Object.keys(exerciseDetails).filter(k => checkedExercises.has(k))
+    for (const key of detailsToValidate) {
+      const detail = exerciseDetails[key]
+      // Only validate if at least one field has a value
+      if (detail.sets.trim() || detail.reps.trim() || detail.weight.trim() || detail.rpe.trim()) {
+        const error = validateExerciseInput(key, parseExerciseInput(detail))
+        if (error) {
+          toast.error(error)
+          return
+        }
+      }
+    }
+
     setChecking(true)
     try {
       const completedExercises = getCompletedExercises()
-      await checkin(plan!.id, completedExercises)
+      await checkin(plan!.id, completedExercises, { notes: notes.trim() || undefined })
       setChecked(true)
       loadProgress()
       const count = completedExercises.length
@@ -98,12 +171,13 @@ export default function PlanDetail() {
       } else {
         toast.success(t('plans.checkinSuccess'))
       }
-    } catch (err: any) {
-      if (err.message === '今天已经打卡过了') {
+    } catch (err: unknown) {
+      const code = (err as { code?: string }).code
+      if (code === 'ALREADY_CHECKED_IN') {
         setChecked(true)
         toast.info(t('plans.checkinDupe'))
       } else {
-        toast.error(err.message || t('plans.checkinFail'))
+        toast.error(err instanceof Error ? err.message : String(err) || t('plans.checkinFail'))
       }
     } finally {
       setChecking(false)
@@ -190,6 +264,19 @@ export default function PlanDetail() {
             {t('plans.selectedCount', { count: getCompletedExercises().length })}
           </p>
         )}
+
+        {/* Notes input */}
+        {!checked && (
+          <div className="mt-4">
+            <textarea
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              placeholder="训练备注（可选） — 今天状态怎么样？"
+              rows={2}
+              className="w-full max-w-md rounded-lg border border-zinc-700 bg-zinc-800/60 px-3 py-2 text-xs text-white placeholder:text-zinc-600 focus:border-green-500 focus:outline-none resize-none"
+            />
+          </div>
+        )}
       </section>
 
       {/* Days */}
@@ -227,24 +314,83 @@ export default function PlanDetail() {
               </div>
 
               {/* Exercise list */}
-              <div className="ml-11 space-y-1 mb-3">
+              <div className="ml-11 space-y-2 mb-3">
                 {day.exercises.map((ex, i) => {
                   const key = `${day.day}-${i}`
                   const isChecked = checkedExercises.has(key)
+                  const detail = exerciseDetails[key]
                   return (
-                    <div
-                      key={i}
-                      className={`flex items-center gap-2 text-sm cursor-pointer select-none transition-colors ${
-                        isChecked ? 'text-green-300' : 'text-zinc-300 hover:text-zinc-200'
-                      }`}
-                      onClick={() => toggleExercise(key)}
-                    >
-                      {isChecked ? (
-                        <CheckCircle className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
-                      ) : (
-                        <Circle className="h-3.5 w-3.5 text-zinc-600 flex-shrink-0 hover:text-zinc-400" />
+                    <div key={i}>
+                      {/* Exercise row (clickable) */}
+                      <div
+                        className={`flex items-center gap-2 text-sm cursor-pointer select-none transition-colors ${
+                          isChecked ? 'text-green-300' : 'text-zinc-300 hover:text-zinc-200'
+                        }`}
+                        onClick={() => toggleExercise(key)}
+                      >
+                        {isChecked ? (
+                          <CheckCircle className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
+                        ) : (
+                          <Circle className="h-3.5 w-3.5 text-zinc-600 flex-shrink-0 hover:text-zinc-400" />
+                        )}
+                        <span className={isChecked ? 'line-through opacity-70' : ''}>{ex.displayText}</span>
+                      </div>
+
+                      {/* V2 input fields — only when checked */}
+                      {isChecked && (
+                        <div className="mt-2 ml-7 grid grid-cols-4 gap-2">
+                          <div>
+                            <label className="block text-[10px] text-zinc-600 mb-0.5">{t('plans.sets')}</label>
+                            <input
+                              type="number"
+                              min="1"
+                              placeholder="-"
+                              value={detail?.sets ?? ''}
+                              onChange={e => updateExerciseDetail(key, 'sets', e.target.value)}
+                              onClick={e => e.stopPropagation()}
+                              className="w-full rounded border border-zinc-700 bg-zinc-800/80 px-2 py-1 text-xs text-white placeholder:text-zinc-600 focus:border-green-500 focus:outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] text-zinc-600 mb-0.5">{t('plans.reps')}</label>
+                            <input
+                              type="number"
+                              min="1"
+                              placeholder="-"
+                              value={detail?.reps ?? ''}
+                              onChange={e => updateExerciseDetail(key, 'reps', e.target.value)}
+                              onClick={e => e.stopPropagation()}
+                              className="w-full rounded border border-zinc-700 bg-zinc-800/80 px-2 py-1 text-xs text-white placeholder:text-zinc-600 focus:border-green-500 focus:outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] text-zinc-600 mb-0.5">{t('plans.weight')}</label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.5"
+                              placeholder="-"
+                              value={detail?.weight ?? ''}
+                              onChange={e => updateExerciseDetail(key, 'weight', e.target.value)}
+                              onClick={e => e.stopPropagation()}
+                              className="w-full rounded border border-zinc-700 bg-zinc-800/80 px-2 py-1 text-xs text-white placeholder:text-zinc-600 focus:border-green-500 focus:outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] text-zinc-600 mb-0.5">RPE</label>
+                            <input
+                              type="number"
+                              min="1"
+                              max="10"
+                              placeholder="-"
+                              value={detail?.rpe ?? ''}
+                              onChange={e => updateExerciseDetail(key, 'rpe', e.target.value)}
+                              onClick={e => e.stopPropagation()}
+                              className="w-full rounded border border-zinc-700 bg-zinc-800/80 px-2 py-1 text-xs text-white placeholder:text-zinc-600 focus:border-green-500 focus:outline-none"
+                            />
+                          </div>
+                        </div>
                       )}
-                      <span className={isChecked ? 'line-through opacity-70' : ''}>{ex.displayText}</span>
                     </div>
                   )
                 })}

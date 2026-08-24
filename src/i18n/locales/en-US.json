@@ -246,7 +246,10 @@
     "checkinSuccessCount": "Completed {{count}} exercises! Keep going 💪",
     "needLogin": "Please log in first",
     "checkinDupe": "Already checked in today",
-    "checkinFail": "Check-in failed"
+    "checkinFail": "Check-in failed",
+    "sets": "Sets",
+    "reps": "Reps",
+    "weight": "Weight"
   },
   "knowledge": {
     "title": "Knowledge Base",
@@ -393,6 +396,11 @@
     "viewPlan": "View Plan",
     "continueTraining": "Continue Training",
     "defaultPlanTitle": "Free Training",
+    "trendTitle": "Weekly Workouts",
+    "trendWorkouts": "workouts",
+    "trendWeekLabel": "Week of {{date}}",
+    "trendEmpty1": "Keep training to gather more data",
+    "trendEmpty2": "Your weekly trend will show here",
     "month": "{{n}}",
     "sun": "Sun",
     "mon": "Mon",

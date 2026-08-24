@@ -41,6 +41,7 @@ export function useFavorites() {
       apiFetchFavorites()
         .then(res => {
           const items: FavoriteItem[] = (res.data?.favorites || []).map(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (f: any) => ({ id: f.id, type: f.type, title: f.title, thumbnail: f.thumbnail })
           )
           setFavorites(items)
@@ -51,9 +52,10 @@ export function useFavorites() {
         })
     } else {
       // 游客：仅 localStorage
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFavorites(loadFromStorage())
     }
-  }, [user?.id])
+  }, [user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleFavorite = useCallback((item: FavoriteItem) => {
     if (user) {
@@ -68,6 +70,7 @@ export function useFavorites() {
       apiToggleFavorite({ id: item.id, type: item.type, title: item.title, thumbnail: item.thumbnail })
         .then(res => {
           const items: FavoriteItem[] = (res.data?.favorites || []).map(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (f: any) => ({ id: f.id, type: f.type, title: f.title, thumbnail: f.thumbnail })
           )
           setFavorites(items)

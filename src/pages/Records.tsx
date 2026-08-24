@@ -1,17 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import { Flame, Trophy, Calendar, ArrowRight, CheckCircle, TrendingUp, BarChart3, ChevronRight, Activity } from 'lucide-react'
+import { Flame, Trophy, Calendar, CheckCircle, TrendingUp, BarChart3, ChevronRight, ChevronDown, Activity } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { getWorkoutHistory, getWorkoutStats } from '../lib/api'
+import type { WorkoutRecord, ExerciseRecord } from '../lib/api'
 import { plans } from '../data/plans'
-
-interface WorkoutRecord {
-  id: number
-  plan_id: string
-  record_date: string
-  created_at: string
-}
+import TrendsChart from '../components/TrendsChart'
 
 interface WorkoutStats {
   total: number
@@ -28,9 +23,10 @@ export default function Records() {
   const [records, setRecords] = useState<WorkoutRecord[]>([])
   const [stats, setStats] = useState<WorkoutStats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [expandedId, setExpandedId] = useState<number | null>(null)
 
   useEffect(() => {
-    if (!user) { setLoading(false); return }
+    if (!user) { setLoading(false); return } // eslint-disable-line react-hooks/set-state-in-effect
     Promise.all([
       getWorkoutHistory(365),
       getWorkoutStats(),
@@ -197,6 +193,9 @@ export default function Records() {
           </section>
         )}
 
+        {/* ─── Weekly Trends ─── */}
+        <TrendsChart />
+
         {/* ─── Calendar Heatmap ─── */}
         {records.length > 0 && (
           <section>
@@ -272,54 +271,103 @@ export default function Records() {
                 const dayOfWeek = WEEKDAYS[date.getDay()]
                 const isToday = record.record_date === new Date().toISOString().split('T')[0]
                 const planTitle = getPlanTitle(record.plan_id)
+                const hasExercises = record.exercises && record.exercises.length > 0
+                const isExpanded = expandedId === record.id
 
                 return (
-                  <div
-                    key={record.id || index}
-                    className={`flex items-center gap-3 rounded-xl border p-3 transition-colors ${
-                      isToday
-                        ? 'border-green-500/30 bg-green-500/5'
-                        : 'border-zinc-800 bg-zinc-900/40 hover:border-zinc-700'
-                    }`}
-                  >
-                    {/* Date */}
-                    <div className="w-12 flex-shrink-0 text-center">
-                      <div className={`text-lg font-bold leading-none ${isToday ? 'text-green-400' : 'text-white'}`}>
-                        {date.getDate()}
+                  <div key={record.id || index}>
+                    {/* Record row (clickable) */}
+                    <div
+                      onClick={() => {
+                        if (hasExercises) setExpandedId(isExpanded ? null : record.id)
+                      }}
+                      className={`flex items-center gap-3 rounded-xl border p-3 transition-colors cursor-pointer ${
+                        isToday
+                          ? 'border-green-500/30 bg-green-500/5'
+                          : 'border-zinc-800 bg-zinc-900/40 hover:border-zinc-700'
+                      }`}
+                    >
+                      {/* Date */}
+                      <div className="w-12 flex-shrink-0 text-center">
+                        <div className={`text-lg font-bold leading-none ${isToday ? 'text-green-400' : 'text-white'}`}>
+                          {date.getDate()}
+                        </div>
+                        <div className={`text-[10px] mt-0.5 ${isToday ? 'text-green-400/70' : 'text-zinc-600'}`}>
+                          {date.getMonth() + 1}/{dayOfWeek}
+                        </div>
                       </div>
-                      <div className={`text-[10px] mt-0.5 ${isToday ? 'text-green-400/70' : 'text-zinc-600'}`}>
-                        {date.getMonth() + 1}/{dayOfWeek}
-                      </div>
-                    </div>
 
-                    {/* Dot separator */}
-                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isToday ? 'bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.4)]' : 'bg-zinc-700'}`} />
+                      {/* Dot separator */}
+                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isToday ? 'bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.4)]' : 'bg-zinc-700'}`} />
 
-                    {/* Plan info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-white truncate">
-                          {planTitle}
-                        </span>
-                        {isToday && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 font-medium flex-shrink-0">
-                            {t('records.today')}
+                      {/* Plan info */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-white truncate">
+                            {planTitle}
                           </span>
+                          {isToday && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 font-medium flex-shrink-0">
+                              {t('records.today')}
+                            </span>
+                          )}
+                        </div>
+                        {record.plan_id && (
+                          <Link
+                            to={`/plans/${record.plan_id}`}
+                            className="text-[11px] text-green-400/60 hover:text-green-400 transition-colors inline-flex items-center gap-0.5"
+                            onClick={e => e.stopPropagation()}
+                          >
+                            {t('records.viewPlan')}
+                            <ChevronRight className="h-3 w-3" />
+                          </Link>
+                        )}
+                        {/* Notes preview — visible without expanding */}
+                        {record.notes && !isExpanded && (
+                          <div className="text-[11px] text-zinc-500 italic truncate mt-0.5 max-w-[200px] sm:max-w-sm">
+                            "{record.notes}"
+                          </div>
                         )}
                       </div>
-                      {record.plan_id && (
-                        <Link
-                          to={`/plans/${record.plan_id}`}
-                          className="text-[11px] text-green-400/60 hover:text-green-400 transition-colors inline-flex items-center gap-0.5"
-                        >
-                          {t('records.viewPlan')}
-                          <ChevronRight className="h-3 w-3" />
-                        </Link>
+
+                      {/* Expand indicator */}
+                      {hasExercises && (
+                        <div className="flex-shrink-0">
+                          {isExpanded ? (
+                            <ChevronDown className={`h-4 w-4 ${isToday ? 'text-green-500' : 'text-zinc-600'}`} />
+                          ) : (
+                            <ChevronRight className={`h-4 w-4 ${isToday ? 'text-green-500' : 'text-zinc-600'}`} />
+                          )}
+                        </div>
                       )}
                     </div>
 
-                    {/* Arrow */}
-                    <ArrowRight className={`h-4 w-4 flex-shrink-0 ${isToday ? 'text-green-500' : 'text-zinc-700'}`} />
+                    {/* Expanded exercise details */}
+                    {isExpanded && hasExercises && (
+                      <div className="mx-auto mt-1 mb-2 w-[calc(100%-3rem)] ml-12 rounded-lg border border-zinc-800 bg-zinc-900/80 p-3">
+                        <div className="space-y-1.5">
+                          {record.exercises!.map((ex: ExerciseRecord) => (
+                            <div key={ex.id} className="text-xs">
+                              <span className="text-zinc-300">{ex.display_text}</span>
+                              <span className="text-zinc-500 ml-1">
+                                {/* V2 format */}
+                                {ex.sets != null && `${ex.sets} × ${ex.reps ?? '-'}`}
+                                {ex.weight != null && ` × ${ex.weight}kg`}
+                                {ex.rpe != null && ` · RPE ${ex.rpe}`}
+                                {/* V1 format fallback — show nothing extra */}
+                                {ex.sets == null && ex.reps == null && ex.weight == null && ex.rpe == null && '✓'}
+                              </span>
+                            </div>
+                          ))}
+                          {/* Notes */}
+                          {record.notes && (
+                            <div className="mt-2 pt-2 border-t border-zinc-800 text-xs text-zinc-500 italic">
+                              "{record.notes}"
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )
               })}
@@ -336,7 +384,7 @@ export default function Records() {
             >
               <Flame className="h-4 w-4" />
               {t('records.continueTraining')}
-              <ArrowRight className="h-4 w-4" />
+              <ChevronRight className="h-4 w-4" />
             </Link>
           </section>
         )}

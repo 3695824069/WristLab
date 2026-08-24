@@ -8,6 +8,50 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+// ─── Types ───
+
+export interface ExerciseInputV2 {
+  exerciseId?: string
+  displayText: string
+  sets?: number | null
+  reps?: number | null
+  weight?: number | null
+  rpe?: number | null
+}
+
+export interface CheckinOptions {
+  dayIndex?: number
+  notes?: string
+  startedAt?: string
+  completedAt?: string
+}
+
+export interface WorkoutRecord {
+  id: number
+  plan_id: string
+  record_date: string
+  day_index?: number | null
+  notes?: string | null
+  started_at?: string | null
+  completed_at?: string | null
+  created_at: string
+  exercises?: ExerciseRecord[]
+}
+
+export interface ExerciseRecord {
+  id: number
+  workout_record_id: number
+  exercise_id?: string | null
+  display_text: string
+  sets?: number | null
+  reps?: number | null
+  weight?: number | null
+  rpe?: number | null
+  completed: number
+  completed_at?: string | null
+  sort_order: number
+}
+
 async function request(path: string, options: RequestInit = {}) {
   const token = (() => {
     try {
@@ -25,15 +69,16 @@ async function request(path: string, options: RequestInit = {}) {
   let res: Response
   try {
     res = await fetch(`${API_BASE}${path}`, { ...options, headers })
-  } catch (netErr: any) {
+  } catch (netErr: unknown) {
     // Network error: backend down, CORS, offline, etc.
-    const msg = netErr?.message || ''
+    const msg = netErr instanceof Error ? netErr.message : String(netErr || '')
     if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
       throw new Error(i18n.t('errors.networkError'))
     }
     throw new Error(i18n.t('errors.networkException'))
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let data: any
   try {
     data = await res.json()
@@ -41,7 +86,11 @@ async function request(path: string, options: RequestInit = {}) {
     throw new Error(i18n.t('errors.serverError'))
   }
 
-  if (!res.ok) throw new Error(data.message || i18n.t('errors.requestFailed'))
+  if (!res.ok) {
+    const err = new Error(data.message || i18n.t('errors.requestFailed')) as Error & { code?: string }
+    if (data.code) err.code = data.code
+    throw err
+  }
   return data
 }
 
@@ -70,11 +119,23 @@ export async function updateProfile(data: { nickname?: string; avatar?: string }
   })
 }
 
-export async function checkin(planId?: string, completedExercises?: { exerciseId?: string; displayText: string }[]) {
-  const body: Record<string, any> = { plan_id: planId || '' }
-  if (completedExercises && completedExercises.length > 0) {
-    body.completedExercises = completedExercises
+export async function checkin(
+  planId?: string,
+  exercises?: ExerciseInputV2[],
+  options?: CheckinOptions,
+) {
+  const body: Record<string, unknown> = { plan_id: planId || '' }
+
+  if (exercises && exercises.length > 0) {
+    // V2 format: use 'exercises' key with structured fields
+    body.exercises = exercises
   }
+
+  if (options?.dayIndex != null) body.day_index = options.dayIndex
+  if (options?.notes != null) body.notes = options.notes
+  if (options?.startedAt != null) body.started_at = options.startedAt
+  if (options?.completedAt != null) body.completed_at = options.completedAt
+
   return request('/workouts/checkin', {
     method: 'POST',
     body: JSON.stringify(body),
@@ -87,6 +148,10 @@ export async function getWorkoutHistory(limit = 30) {
 
 export async function getWorkoutStats() {
   return request('/workouts/stats')
+}
+
+export async function getWorkoutTrends(weeks = 12) {
+  return request(`/workouts/trends?weeks=${weeks}`)
 }
 
 export async function getTodayWorkout() {

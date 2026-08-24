@@ -1,5 +1,5 @@
 const express = require('express');
-const { createWorkoutRecord, getWorkoutRecords, getWorkoutStats } = require('./db.cjs');
+const { createWorkoutRecord, getWorkoutRecords, getWorkoutStats, getWorkoutTrends } = require('./db.cjs');
 const { requireAuth } = require('./middleware/auth.cjs');
 
 const router = express.Router();
@@ -7,15 +7,24 @@ const router = express.Router();
 // JWT auth middleware
 router.post('/checkin', requireAuth, async (req, res) => {
   try {
-    const { plan_id, completedExercises } = req.body;
-    const result = await createWorkoutRecord(req.user.userId, plan_id || '', completedExercises || []);
+    const { plan_id, completedExercises, exercises, day_index, notes, started_at, completed_at } = req.body;
+
+    // V2 format: 'exercises' takes precedence; fall back to 'completedExercises' for backward compat
+    const exerciseData = exercises || completedExercises || [];
+
+    const result = await createWorkoutRecord(
+      req.user.userId,
+      plan_id || '',
+      exerciseData,
+      { dayIndex: day_index, notes, startedAt: started_at, completedAt: completed_at }
+    );
     if (result) {
       // Reload the full record with exercises
       const records = await getWorkoutRecords(req.user.userId, 1);
       const record = records[0] || result;
       res.json({ success: true, message: '打卡成功', data: { record } });
     } else {
-      res.status(409).json({ success: false, message: '今天已经打卡过了' });
+      res.status(409).json({ success: false, message: '今天已经打卡过了', code: 'ALREADY_CHECKED_IN' });
     }
   } catch (err) {
     console.error('checkin error:', err);
@@ -42,6 +51,18 @@ router.get('/stats', requireAuth, async (req, res) => {
     res.json({ success: true, data: { stats } });
   } catch (err) {
     console.error('stats error:', err);
+    res.status(500).json({ success: false, message: '服务器内部错误' });
+  }
+});
+
+// GET /api/workouts/trends — 每周训练趋势
+router.get('/trends', requireAuth, async (req, res) => {
+  try {
+    const weeks = Math.min(parseInt(req.query.weeks) || 12, 52);
+    const trends = await getWorkoutTrends(req.user.userId, weeks);
+    res.json({ success: true, data: { trends } });
+  } catch (err) {
+    console.error('trends error:', err);
     res.status(500).json({ success: false, message: '服务器内部错误' });
   }
 });

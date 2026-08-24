@@ -8,3 +8,10 @@ node_modules/
 .DS_Store
 dist/
 .workbuddy/
+
+# gstack skill (57MB) — installed locally via npx skills, not part of repo
+.agents/
+.claude/skills/
+
+# gstack security reports — local only, should never be committed
+.gstack/

@@ -10,7 +10,7 @@ const getInitialLanguage = (): string => {
   if (stored === 'zh-CN' || stored === 'en-US') return stored
 
   // 2. Check browser language
-  const browserLang = navigator.language || (navigator as any).userLanguage || ''
+  const browserLang = navigator.language || (navigator as { userLanguage?: string }).userLanguage || ''
   if (browserLang.startsWith('zh')) return 'zh-CN'
 
   // 3. Default to Chinese

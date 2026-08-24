@@ -1,0 +1,37 @@
+# gitleaks 配置 — 防止敏感信息被提交进 git
+# 安装: https://github.com/gitleaks/gitleaks
+# 本地检查: gitleaks git --pre-commit
+# pre-commit 示例:
+#   - repo: https://github.com/gitleaks/gitleaks
+#     rev: v8.18.4
+#     hooks:
+#       - id: gitleaks
+
+title = "WristLab gitleaks config"
+
+# 默认使用内置规则（含 AKIA、ghp_、sk-ant-、private keys 等）
+[extend]
+useDefault = true
+
+# 项目自定义规则
+[[rules]]
+id = "wristlab-jwt-secret"
+description = "WristLab 自定义 JWT secret 占位符（历史密钥曾被写入文档）"
+regex = '''JWT_SECRET\s*=\s*['"]?[A-Za-z0-9+/=_\-]{20,}['"]?'''
+secretGroup = 0
+keywords = ["JWT_SECRET"]
+
+# .env 永远排除在扫描外（真实密钥只存在本地）
+[allowlist]
+paths = [
+  '''\.env$''',
+  '''\.env\.example$''',
+  '''\.env\.development$''',
+  '''\.env\.production$''',
+  '''package-lock\.json$''',
+  '''node_modules/''',
+  '''\.gstack/''',
+  '''\.agents/''',
+  '''\.claude/''',
+  '''dist/''',
+]
