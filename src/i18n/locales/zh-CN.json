@@ -296,7 +296,7 @@
     "toastCodeSent": "验证码已发送",
     "toastSendFail": "发送失败",
     "toastPhoneInvalid": "请输入正确手机号",
-    "toastCodeInvalid": "请输入4位验证码",
+    "toastCodeInvalid": "请输入6位验证码",
     "toastLoginSuccess": "登录成功",
     "toastLoginFail": "登录失败"
   },

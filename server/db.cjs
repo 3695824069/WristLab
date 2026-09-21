@@ -193,10 +193,28 @@ function verifyCode(phone, code) {
      ORDER BY id DESC LIMIT 1`,
     [phone, code]
   );
-  if (!row) return false;
+  if (row) {
+    execute('UPDATE sms_codes SET used = 1 WHERE id = ?', [row.id]);
+    return true;
+  }
 
-  execute('UPDATE sms_codes SET used = 1 WHERE id = ?', [row.id]);
-  return true;
+  // Wrong code: count the attempt against the phone's latest unused code.
+  // After 5 wrong attempts the code is discarded (user must re-request).
+  const latest = queryOne(
+    `SELECT id, attempts FROM sms_codes
+     WHERE phone = ? AND used = 0 AND strftime('%s', expires_at) > strftime('%s', 'now')
+     ORDER BY id DESC LIMIT 1`,
+    [phone]
+  );
+  if (latest) {
+    const attempts = (latest.attempts || 0) + 1;
+    if (attempts >= 5) {
+      execute('UPDATE sms_codes SET used = 1, attempts = ? WHERE id = ?', [attempts, latest.id]);
+    } else {
+      execute('UPDATE sms_codes SET attempts = ? WHERE id = ?', [attempts, latest.id]);
+    }
+  }
+  return false;
 }
 
 // --- Workout Record operations ---

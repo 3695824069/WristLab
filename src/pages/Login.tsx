@@ -46,7 +46,7 @@ export default function Login() {
       toast.error(t('login.toastPhoneInvalid'))
       return
     }
-    if (!code || code.length < 4) {
+    if (!code || code.length < 6) {
       toast.error(t('login.toastCodeInvalid'))
       return
     }

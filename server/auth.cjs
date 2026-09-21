@@ -28,12 +28,37 @@ function checkRateLimit(phone) {
   return true;
 }
 
+// --- In-memory IP rate limiter for login (prevents phone rotation) ---
+const ipRateLimitMap = new Map();
+const IP_RATE_WINDOW_MS = 60_000;   // 1 minute window
+const IP_RATE_MAX_PER_WINDOW = 10;  // max 10 login attempts per minute per IP
+
+function checkIpRateLimit(ip) {
+  const now = Date.now();
+  let entry = ipRateLimitMap.get(ip);
+
+  if (!entry || now - entry.windowStart > IP_RATE_WINDOW_MS) {
+    entry = { count: 0, windowStart: now };
+    ipRateLimitMap.set(ip, entry);
+  }
+
+  if (entry.count >= IP_RATE_MAX_PER_WINDOW) return false;
+
+  entry.count++;
+  return true;
+}
+
 // Periodic cleanup to prevent memory leak
 setInterval(() => {
   const now = Date.now();
   for (const [key, entry] of rateLimitMap) {
     if (now - entry.windowStart > RATE_WINDOW_MS) {
       rateLimitMap.delete(key);
+    }
+  }
+  for (const [key, entry] of ipRateLimitMap) {
+    if (now - entry.windowStart > IP_RATE_WINDOW_MS) {
+      ipRateLimitMap.delete(key);
     }
   }
 }, RATE_CLEANUP_INTERVAL);
@@ -77,7 +102,7 @@ async function sendSms(phone, code) {
     SignName: SIGN_NAME,
     TemplateCode: TEMPLATE_CODE,
     TemplateParam: JSON.stringify({ code, min: String(CODE_EXPIRY_MINUTES) }),
-    CodeLength: 4,
+    CodeLength: 6,
     ValidTime: CODE_EXPIRY_MINUTES * 60,
     CodeType: 1,
     ReturnVerifyCode: true,
@@ -132,7 +157,7 @@ router.post('/send-code', async (req, res) => {
       return res.status(429).json({ success: false, message: '请求过于频繁，请稍后再试' });
     }
 
-    const code = String(Math.floor(1000 + Math.random() * 9000));
+    const code = String(Math.floor(100000 + Math.random() * 900000));
     const expiresAt = new Date(Date.now() + CODE_EXPIRY_MINUTES * 60 * 1000).toISOString();
 
     // Save code before attempting SMS (will expire naturally if SMS fails)
@@ -218,12 +243,19 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ success: false, message: '请输入正确的手机号' });
     }
 
-    if (!code || !/^\d{4}$/.test(code)) {
-      return res.status(400).json({ success: false, message: '请输入4位验证码' });
+    if (!code || !/^\d{6}$/.test(code)) {
+      return res.status(400).json({ success: false, message: '请输入6位验证码' });
     }
 
     // Rate limit: max 5 attempts per phone per minute
     if (!checkRateLimit(phone)) {
+      return res.status(429).json({ success: false, message: '请求过于频繁，请稍后再试' });
+    }
+
+    // IP rate limit: max 10 login attempts per minute per IP
+    const ip = (req.ip || req.socket?.remoteAddress || '').replace(/^::ffff:/, '');
+    if (!checkIpRateLimit(ip)) {
+      console.warn(`[RateLimit] login throttled for IP: ${ip}`);
       return res.status(429).json({ success: false, message: '请求过于频繁，请稍后再试' });
     }
 
