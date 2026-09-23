@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { courses } from '../data/courses'
@@ -8,10 +8,18 @@ import VideoPlayer from '../components/VideoPlayer'
 import VideoModal from '../components/VideoModal'
 import { useFavorites } from '../hooks/useFavorites'
 import { useAuth } from '../context/AuthContext'
-import { checkin } from '../lib/api'
+import { checkin, getWorkoutHistory } from '../lib/api'
 import { toast } from 'sonner'
 
 const diffColor = difficultyColors
+
+/** Local-timezone YYYY-MM-DD — matches server record_date (avoids UTC off-by-one). */
+function localDateStr(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
 
 export default function CourseDetail() {
   const { t } = useTranslation()
@@ -23,6 +31,18 @@ export default function CourseDetail() {
   const navigate = useNavigate()
   const [checkingIn, setCheckingIn] = useState(false)
   const [checkedIn, setCheckedIn] = useState(false)
+
+  // Load whether this course was already checked in today (server-persisted record)
+  const loadCheckedIn = useCallback(() => {
+    if (!user || !course) return
+    getWorkoutHistory(365).then(res => {
+      const records: { record_date: string; plan_id: string }[] = res.data?.records || []
+      const today = localDateStr(new Date())
+      setCheckedIn(records.some(r => r.record_date === today && r.plan_id === course.id))
+    }).catch(() => {})
+  }, [user, course])
+
+  useEffect(() => { loadCheckedIn() }, [loadCheckedIn])
 
   if (!course) {
     return (
@@ -114,6 +134,7 @@ export default function CourseDetail() {
               try {
                 await checkin(course.id)
                 setCheckedIn(true)
+                loadCheckedIn()
                 toast.success(t('courses.checkinSuccess'))
               } catch (err: unknown) {
                 const code = (err as { code?: string }).code
