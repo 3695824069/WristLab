@@ -15,3 +15,6 @@ dist/
 
 # gstack security reports — local only, should never be committed
 .gstack/
+
+# playwright-cli session artifacts (snapshots, console logs)
+.playwright-cli/
